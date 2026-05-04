@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "kdf": {
+    "name": "PBKDF2",
+    "hash": "SHA-256",
+    "iters": 200000,
+    "salt_b64": "V3UQT3wwr3PpMxxj6sMkXQ=="
+  },
+  "iv_b64": "3FGFZahJN38/76Zf",
+  "ct_b64": "tO0SiAeJvKi1vGtv8AJE/BFPZNFog2lpT9z2+/EztCzBNlC5/szT5JahqWjG0W6U6iEd3EfqSYCCyNbJ2T0Vk0u/7K2p579g4ZtOUfN/Nx3khxGIbDzWSesPb2fKXjFUSyQY5Hd9LWP0wu+rgTaEIXSbIgPEAtq5K20v/iE2HTpOMXMVdn+lw17Yb3rsUhUq/uIgEDokky2bXJ/mzs52nShokP0exHtZDrf1zN+vo1JHQR+6Gf6juw=="
+}
