@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Job Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Job Tracker</h1>
+    <div id="meta" class="meta"></div>
+  </header>
+
+  <main>
+    <section id="gate" class="card">
+      <h2>Locked</h2>
+      <p>Enter password to view applications.</p>
+      <form id="unlock-form">
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password" autofocus />
+        <button type="submit">Unlock</button>
+      </form>
+      <p id="gate-error" class="error" hidden></p>
+    </section>
+
+    <section id="app" hidden>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Search company, role, status..." autocomplete="off" />
+        <span id="count" class="count"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="grid">
+          <thead><tr id="grid-head"></tr></thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="empty" hidden>No matches.</p>
+    </section>
+  </main>
+
+  <footer>
+    <a href="admin.html">Update data</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

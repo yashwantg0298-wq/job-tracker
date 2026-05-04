@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Job Tracker — Update data</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .admin { max-width: 760px; margin: 32px auto; }
+    textarea { min-height: 280px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+    .row label { color: var(--muted); width: 110px; }
+    pre { background: var(--panel-2); padding: 12px; border-radius: 6px; overflow: auto; max-height: 200px; font-size: 11px; }
+    .ok { color: var(--status-offer); }
+  </style>
+</head>
+<body>
+  <header><h1>Job Tracker — Update data</h1></header>
+  <main class="admin">
+    <p>Paste the JSON payload (an object with a <code>rows</code> array), enter the same password the site uses, and download the encrypted file. Replace <code>data/applications.enc.json</code> in the repo and push.</p>
+
+    <div class="row"><label>Password</label><input id="pw" type="password" placeholder="Password" /></div>
+    <div class="row"><label>JSON</label></div>
+    <textarea id="json" spellcheck="false" placeholder='{ "updated_at": "2026-05-03T12:00:00Z", "rows": [ { "Company": "Foo", "Role": "SWE", "Status": "Applied" } ] }'></textarea>
+
+    <div class="row">
+      <button id="encrypt">Encrypt and download</button>
+      <button id="loadSample" type="button" style="background: var(--panel-2); color: var(--text);">Load sample</button>
+      <span id="status"></span>
+    </div>
+
+    <h3>Output preview</h3>
+    <pre id="preview">(none yet)</pre>
+
+    <p><a href="index.html">Back to tracker</a></p>
+  </main>
+
+  <script>
+    const SAMPLE = {
+      updated_at: new Date().toISOString(),
+      rows: [
+        { Company: "Acme Corp", Role: "Software Engineer", Status: "Applied", "Date Applied": "2026-04-20", Source: "LinkedIn", Link: "https://example.com/job1", Notes: "Referred by Alex" },
+        { Company: "Globex", Role: "Backend Engineer", Status: "Interview", "Date Applied": "2026-04-15", Source: "Company site", Link: "https://example.com/job2", Notes: "Phone screen 04-25" },
+        { Company: "Initech", Role: "ML Engineer", Status: "Rejected", "Date Applied": "2026-03-30", Source: "Recruiter outreach", Link: "", Notes: "" },
+        { Company: "Hooli", Role: "Senior SWE", Status: "Offer", "Date Applied": "2026-03-10", Source: "Referral", Link: "https://example.com/job4", Notes: "Negotiating" }
+      ]
+    };
+
+    function bytesToB64(bytes) {
+      let s = "";
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return btoa(s);
+    }
+
+    async function deriveKey(password, salt) {
+      const baseKey = await crypto.subtle.importKey(
+        "raw", new TextEncoder().encode(password),
+        { name: "PBKDF2" }, false, ["deriveKey"]
+      );
+      return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt, iterations: 200000, hash: "SHA-256" },
+        baseKey,
+        { name: "AES-GCM", length: 256 },
+        false, ["encrypt"]
+      );
+    }
+
+    async function encryptBundle(plaintext, password) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const key = await deriveKey(password, salt);
+      const ct = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        key,
+        new TextEncoder().encode(plaintext)
+      );
+      return {
+        v: 1,
+        kdf: { name: "PBKDF2", hash: "SHA-256", iters: 200000, salt_b64: bytesToB64(salt) },
+        iv_b64: bytesToB64(iv),
+        ct_b64: bytesToB64(new Uint8Array(ct))
+      };
+    }
+
+    document.getElementById("loadSample").addEventListener("click", () => {
+      document.getElementById("json").value = JSON.stringify(SAMPLE, null, 2);
+    });
+
+    document.getElementById("encrypt").addEventListener("click", async () => {
+      const status = document.getElementById("status");
+      const preview = document.getElementById("preview");
+      status.textContent = "";
+      preview.textContent = "";
+      const pw = document.getElementById("pw").value;
+      const raw = document.getElementById("json").value;
+      if (!pw) { status.textContent = "password required"; return; }
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (e) { status.textContent = "invalid JSON: " + e.message; return; }
+      if (!Array.isArray(parsed.rows)) { status.textContent = "JSON must have a 'rows' array"; return; }
+
+      const bundle = await encryptBundle(JSON.stringify(parsed), pw);
+      const text = JSON.stringify(bundle, null, 2);
+      preview.textContent = text.slice(0, 400) + (text.length > 400 ? "\n..." : "");
+
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "applications.enc.json";
+      a.click();
+      URL.revokeObjectURL(url);
+
+      status.innerHTML = '<span class="ok">downloaded — replace data/applications.enc.json and push.</span>';
+    });
+  </script>
+</body>
+</html>
