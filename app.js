@@ -67,17 +67,27 @@ function makeLogo(row) {
   const wrap = document.createElement("div");
   wrap.className = "logo";
   const initial = (row.Company || "?").trim().charAt(0).toUpperCase();
-  wrap.textContent = initial;
+  const monogram = document.createElement("span");
+  monogram.className = "monogram";
+  monogram.textContent = initial;
+  wrap.appendChild(monogram);
+
   const candidates = logoCandidates(row.Domain || "");
   if (!candidates.length) return wrap;
 
   const img = document.createElement("img");
   img.alt = "";
   let idx = 0;
-  img.onerror = () => {
+  const tryNext = () => {
     idx += 1;
     if (idx < candidates.length) img.src = candidates[idx];
-    else img.remove();
+    else img.remove(); // keep monogram visible
+  };
+  img.onerror = tryNext;
+  img.onload = () => {
+    // Reject the favicon "globe" placeholder Google returns for unknown domains.
+    if (img.naturalWidth < 16) { tryNext(); return; }
+    monogram.style.display = "none";
   };
   img.src = candidates[0];
   wrap.appendChild(img);
