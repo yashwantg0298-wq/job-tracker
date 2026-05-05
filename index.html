@@ -4,44 +4,72 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Job Tracker</title>
+  <title>Personal Job Vault</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <h1>Job Tracker</h1>
-    <div id="meta" class="meta"></div>
-  </header>
 
-  <main>
-    <section id="gate" class="card">
-      <h2>Locked</h2>
-      <p>Enter password to view applications.</p>
-      <form id="unlock-form">
-        <input id="password" type="password" autocomplete="current-password" placeholder="Password" autofocus />
-        <button type="submit">Unlock</button>
-      </form>
-      <p id="gate-error" class="error" hidden></p>
-    </section>
-
-    <section id="app" hidden>
-      <div class="toolbar">
-        <input id="search" type="search" placeholder="Search company, role, status..." autocomplete="off" />
-        <span id="count" class="count"></span>
+  <!-- LOGIN GATE -->
+  <section id="gate">
+    <div class="spheres" aria-hidden="true">
+      <div class="sphere s1"></div>
+      <div class="sphere s2"></div>
+      <div class="sphere s3"></div>
+      <div class="sphere s4"></div>
+      <div class="sphere s5"></div>
+    </div>
+    <div class="app-brand">Job Tracker</div>
+    <div class="gate-wrap">
+      <div class="gate-card">
+        <h1>Personal Job Vault</h1>
+        <p>Enter password to view applications.</p>
+        <form id="unlock-form" autocomplete="off">
+          <input id="password" type="password" autocomplete="current-password" placeholder="Password" autofocus />
+          <button type="submit" class="btn-primary">Unlock Dashboard</button>
+        </form>
+        <p id="gate-error" class="gate-error" hidden></p>
       </div>
-      <div class="table-wrap">
-        <table id="grid">
-          <thead><tr id="grid-head"></tr></thead>
-          <tbody id="grid-body"></tbody>
-        </table>
-      </div>
-      <p id="empty" class="empty" hidden>No matches.</p>
-    </section>
-  </main>
+    </div>
+    <div class="gate-footer"><a href="admin.html">Update data</a></div>
+  </section>
 
-  <footer>
-    <a href="admin.html">Update data</a>
-  </footer>
+  <!-- DASHBOARD SHELL -->
+  <section id="app" hidden>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="app-brand" style="position: static; margin: 0 8px 24px;">Job Tracker</div>
+        <ul class="nav">
+          <li class="active" data-view="dashboard">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span>Dashboard</span>
+          </li>
+          <li>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M4 9h16"/></svg>
+            <span>Applications</span>
+          </li>
+          <li>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+            <span>Documents</span>
+          </li>
+          <li>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
+            <span>Analytics</span>
+          </li>
+          <li>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            <span>Settings</span>
+          </li>
+        </ul>
+
+        <div class="upcoming">
+          <h3>Upcoming Interviews</h3>
+          <ul id="upcoming-list"><li class="empty">No upcoming interviews</li></ul>
+        </div>
+      </aside>
+
+      <main class="main" id="view-root"><!-- view rendered here --></main>
+    </div>
+  </section>
 
   <script src="app.js"></script>
 </body>

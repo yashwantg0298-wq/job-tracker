@@ -7,113 +7,303 @@
   <title>Job Tracker — Update data</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    .admin { max-width: 760px; margin: 32px auto; }
-    textarea { min-height: 280px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
-    .row { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
-    .row label { color: var(--muted); width: 110px; }
-    pre { background: var(--panel-2); padding: 12px; border-radius: 6px; overflow: auto; max-height: 200px; font-size: 11px; }
-    .ok { color: var(--status-offer); }
+    .admin-shell { max-width: 980px; margin: 32px auto; padding: 0 24px 64px; position: relative; z-index: 1; }
+    .admin-shell h1 { font-size: 26px; margin: 0 0 6px; }
+    .admin-shell .lede { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; backdrop-filter: blur(8px); }
+    .panel h2 { font-size: 14px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.6px; margin: 0 0 14px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 720px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+    input[type=text], input[type=number], input[type=password], select, textarea {
+      width: 100%; background: rgba(0,0,0,0.25); border: 1px solid var(--border); color: var(--text);
+      padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 13px; outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
+    textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+    textarea.tall { min-height: 140px; }
+    .row-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--border); padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+    .btn-secondary:hover { border-color: var(--border-strong); }
+    .btn-suggest { background: linear-gradient(135deg, #a78bfa, #6aa8ff); color: #0c1126; border: none; padding: 9px 14px; border-radius: 8px; font-weight: 700; font-size: 12px; }
+    .btn-danger { background: rgba(248,113,113,0.15); color: var(--status-rejected); border: 1px solid rgba(248,113,113,0.35); padding: 9px 14px; border-radius: 8px; font-weight: 600; font-size: 12px; }
+    pre { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; overflow: auto; max-height: 220px; font-size: 11px; color: var(--muted); }
+    .status-msg { color: var(--status-offer); font-size: 13px; }
+    .status-msg.err { color: var(--error); }
+    .applist { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding: 4px; }
+    .applist .item { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; font-size: 13px; }
+    .applist .item:hover { background: rgba(255,255,255,0.04); border-color: var(--border); }
+    .applist .item.active { background: rgba(34,211,238,0.10); border-color: rgba(34,211,238,0.35); }
+    .applist .meta { color: var(--muted); font-size: 11px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .toolbar input { flex: 1; }
+    .help { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .gate-mini { max-width: 420px; margin: 80px auto; }
   </style>
 </head>
 <body>
-  <header><h1>Job Tracker — Update data</h1></header>
-  <main class="admin">
-    <p>Paste the JSON payload (an object with a <code>rows</code> array), enter the same password the site uses, and download the encrypted file. Replace <code>data/applications.enc.json</code> in the repo and push.</p>
+  <div class="spheres" aria-hidden="true">
+    <div class="sphere s1"></div>
+    <div class="sphere s3"></div>
+    <div class="sphere s4"></div>
+  </div>
+  <div class="app-brand">Job Tracker — Admin</div>
 
-    <div class="row"><label>Password</label><input id="pw" type="password" placeholder="Password" /></div>
-    <div class="row"><label>JSON</label></div>
-    <textarea id="json" spellcheck="false" placeholder='{ "updated_at": "2026-05-03T12:00:00Z", "rows": [ { "Company": "Foo", "Role": "SWE", "Status": "Applied" } ] }'></textarea>
+  <!-- Lock screen for admin -->
+  <section id="admin-gate">
+    <div class="gate-wrap">
+      <div class="gate-card gate-mini">
+        <h1 style="font-size: 28px;">Admin</h1>
+        <p>Enter password to load and re-encrypt your applications file.</p>
+        <form id="admin-unlock">
+          <div style="display:flex;gap:10px">
+            <input id="admin-pw" type="password" placeholder="Password" autofocus style="flex:1" />
+            <button type="submit" class="btn-primary">Unlock</button>
+          </div>
+        </form>
+        <p id="admin-err" class="gate-error" hidden></p>
+        <p style="text-align:center;margin-top:18px;font-size:12px;color:var(--muted);"><a href="index.html">← Back to dashboard</a></p>
+      </div>
+    </div>
+  </section>
 
-    <div class="row">
-      <button id="encrypt">Encrypt and download</button>
-      <button id="loadSample" type="button" style="background: var(--panel-2); color: var(--text);">Load sample</button>
-      <span id="status"></span>
+  <main id="admin" class="admin-shell" hidden>
+    <h1>Manage Applications</h1>
+    <p class="lede">Edit fields, encrypt, and download <code>applications.enc.json</code>. Replace the file in your repo and push to publish.</p>
+
+    <div class="panel">
+      <h2>Applications (<span id="row-count">0</span>)</h2>
+      <div class="toolbar">
+        <input id="filter" type="search" placeholder="Filter applications..." />
+        <button class="btn-secondary" id="new-app">+ New</button>
+      </div>
+      <div class="applist" id="applist"></div>
     </div>
 
-    <h3>Output preview</h3>
-    <pre id="preview">(none yet)</pre>
+    <div class="panel" id="editor" hidden>
+      <h2>Edit Application</h2>
+      <div class="grid2">
+        <div><label>Company</label><input id="f-Company" type="text" /></div>
+        <div><label>Domain (for logo)</label><input id="f-Domain" type="text" placeholder="e.g. tesla.com" /></div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Role / Position</label><input id="f-Role" type="text" /></div>
+        <div><label>Status</label><input id="f-Status" type="text" placeholder="Applied, Interviewing, Offer, Rejected, ..." /></div>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <div><label>Date Applied</label><input id="f-DateApplied" type="text" placeholder="DD-MMM-YY" /></div>
+        <div><label>Location</label><input id="f-Location" type="text" /></div>
+        <div><label>Platform</label><input id="f-Platform" type="text" /></div>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <div><label>Tier</label><input id="f-Tier" type="text" /></div>
+        <div><label>Grade</label><input id="f-Grade" type="text" /></div>
+        <div><label>Job ID / Req</label><input id="f-JobId" type="text" /></div>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <div><label>Salary Band</label><input id="f-SalaryBand" type="text" /></div>
+        <div><label>Quote CTC</label><input id="f-QuoteCTC" type="text" /></div>
+        <div><label>Fit %</label><input id="f-Fit" type="text" placeholder="0-100" /></div>
+      </div>
+      <div style="margin-top:10px"><label>Chances</label><input id="f-Chances" type="text" placeholder="e.g. Moderate (25-40%)" /></div>
 
-    <p><a href="index.html">Back to tracker</a></p>
+      <div style="margin-top:12px"><label>Role Summary (Job Description)</label>
+        <textarea id="f-JD" class="tall"></textarea></div>
+
+      <div style="margin-top:12px">
+        <label>STAR Story
+          <button class="btn-suggest" id="ai-suggest" style="float:right">✨ Suggest with AI</button>
+        </label>
+        <textarea id="f-STAR" class="tall" placeholder="Situation. Task. Action. Result."></textarea>
+        <div class="help">Tip: Configure your Anthropic API key in <code>sync/.secrets.env</code> and run the sync agent for automated suggestions, or paste a key when prompted to suggest in-browser.</div>
+      </div>
+
+      <div style="margin-top:12px"><label>Next Step</label>
+        <textarea id="f-NextStep"></textarea></div>
+      <div style="margin-top:12px"><label>Notes / Key Facts</label>
+        <textarea id="f-Notes"></textarea></div>
+
+      <div class="row-actions">
+        <button class="btn-primary" id="save-row">Save changes</button>
+        <button class="btn-danger" id="delete-row">Delete application</button>
+        <span id="editor-msg" class="status-msg"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Encrypt &amp; Download</h2>
+      <p class="lede" style="margin-bottom:12px">When you've made all your edits, encrypt with the same password and download the new <code>applications.enc.json</code>. Replace it in the repo and push.</p>
+      <div class="row-actions">
+        <button class="btn-primary" id="encrypt-download">Encrypt and download</button>
+        <span id="encrypt-msg" class="status-msg"></span>
+      </div>
+      <h3 style="margin-top:18px;font-size:13px;color:var(--muted)">Output preview</h3>
+      <pre id="enc-preview">(none yet)</pre>
+    </div>
   </main>
 
   <script>
-    const SAMPLE = {
-      updated_at: new Date().toISOString(),
-      rows: [
-        { Company: "Acme Corp", Role: "Software Engineer", Status: "Applied", "Date Applied": "2026-04-20", Source: "LinkedIn", Link: "https://example.com/job1", Notes: "Referred by Alex" },
-        { Company: "Globex", Role: "Backend Engineer", Status: "Interview", "Date Applied": "2026-04-15", Source: "Company site", Link: "https://example.com/job2", Notes: "Phone screen 04-25" },
-        { Company: "Initech", Role: "ML Engineer", Status: "Rejected", "Date Applied": "2026-03-30", Source: "Recruiter outreach", Link: "", Notes: "" },
-        { Company: "Hooli", Role: "Senior SWE", Status: "Offer", "Date Applied": "2026-03-10", Source: "Referral", Link: "https://example.com/job4", Notes: "Negotiating" }
-      ]
-    };
+    // ===== crypto =====
+    const DATA_URL = "data/applications.enc.json";
+    const PBKDF2_ITERS = 200000;
 
-    function bytesToB64(bytes) {
-      let s = "";
-      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-      return btoa(s);
+    function bytesToB64(bytes){let s="";for(let i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return btoa(s);}
+    function b64ToBytes(b64){const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u;}
+    async function deriveKey(password, salt, iters, hash, usage){
+      const baseKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
+      return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations: iters, hash}, baseKey, {name:"AES-GCM", length:256}, false, [usage]);
     }
-
-    async function deriveKey(password, salt) {
-      const baseKey = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(password),
-        { name: "PBKDF2" }, false, ["deriveKey"]
-      );
-      return crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt, iterations: 200000, hash: "SHA-256" },
-        baseKey,
-        { name: "AES-GCM", length: 256 },
-        false, ["encrypt"]
-      );
-    }
-
-    async function encryptBundle(plaintext, password) {
+    async function encryptBundle(plaintext, password){
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(12));
-      const key = await deriveKey(password, salt);
-      const ct = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv },
-        key,
-        new TextEncoder().encode(plaintext)
-      );
-      return {
-        v: 1,
-        kdf: { name: "PBKDF2", hash: "SHA-256", iters: 200000, salt_b64: bytesToB64(salt) },
-        iv_b64: bytesToB64(iv),
-        ct_b64: bytesToB64(new Uint8Array(ct))
-      };
+      const key = await deriveKey(password, salt, PBKDF2_ITERS, "SHA-256", "encrypt");
+      const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(plaintext));
+      return { v:1, kdf:{name:"PBKDF2", hash:"SHA-256", iters: PBKDF2_ITERS, salt_b64: bytesToB64(salt)}, iv_b64: bytesToB64(iv), ct_b64: bytesToB64(new Uint8Array(ct)) };
+    }
+    async function decryptBundle(bundle, password){
+      const salt = b64ToBytes(bundle.kdf.salt_b64);
+      const iv = b64ToBytes(bundle.iv_b64);
+      const ct = b64ToBytes(bundle.ct_b64);
+      const key = await deriveKey(password, salt, bundle.kdf.iters, bundle.kdf.hash, "decrypt");
+      const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, ct);
+      return JSON.parse(new TextDecoder().decode(pt));
     }
 
-    document.getElementById("loadSample").addEventListener("click", () => {
-      document.getElementById("json").value = JSON.stringify(SAMPLE, null, 2);
+    // ===== state =====
+    const FIELDS = [
+      ["Company","Company"], ["Domain","Domain"],
+      ["Role","Role / Position"], ["Status","Status"],
+      ["DateApplied","Date Applied"], ["Location","Location"], ["Platform","Platform"],
+      ["Tier","Tier"], ["Grade","Grade"], ["JobId","Job ID / Req"],
+      ["SalaryBand","Salary Band"], ["QuoteCTC","Quote CTC"], ["Fit","Fit %"],
+      ["Chances","Chances"], ["JD","Role Summary (JD)"], ["STAR","STAR Story"],
+      ["NextStep","Next Step"], ["Notes","Notes / Key Facts"],
+    ];
+
+    const state = { password: "", payload: null, selected: -1, filter: "" };
+
+    // ===== gate =====
+    document.getElementById("admin-unlock").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pw = document.getElementById("admin-pw").value;
+      const err = document.getElementById("admin-err");
+      err.hidden = true;
+      let bundle;
+      try {
+        const res = await fetch(DATA_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error("data not found");
+        bundle = await res.json();
+      } catch (e) {
+        err.textContent = "Could not load data file."; err.hidden = false; return;
+      }
+      try {
+        const payload = await decryptBundle(bundle, pw);
+        state.password = pw;
+        state.payload = payload;
+        document.getElementById("admin-gate").hidden = true;
+        document.getElementById("admin").hidden = false;
+        renderList();
+      } catch (e2) {
+        err.textContent = "Wrong password."; err.hidden = false;
+      }
     });
 
-    document.getElementById("encrypt").addEventListener("click", async () => {
-      const status = document.getElementById("status");
-      const preview = document.getElementById("preview");
-      status.textContent = "";
-      preview.textContent = "";
-      const pw = document.getElementById("pw").value;
-      const raw = document.getElementById("json").value;
-      if (!pw) { status.textContent = "password required"; return; }
-      let parsed;
-      try { parsed = JSON.parse(raw); }
-      catch (e) { status.textContent = "invalid JSON: " + e.message; return; }
-      if (!Array.isArray(parsed.rows)) { status.textContent = "JSON must have a 'rows' array"; return; }
+    // ===== list / editor =====
+    function renderList() {
+      const host = document.getElementById("applist");
+      host.innerHTML = "";
+      const rows = state.payload.rows || [];
+      const filt = state.filter.trim().toLowerCase();
+      let visible = 0;
+      rows.forEach((r, i) => {
+        const text = (r.Company || "") + " " + (r["Role / Position"] || "") + " " + (r.Status || "");
+        if (filt && !text.toLowerCase().includes(filt)) return;
+        visible++;
+        const div = document.createElement("div");
+        div.className = "item" + (state.selected === i ? " active" : "");
+        const left = document.createElement("div");
+        left.innerHTML = `<b>${escapeHtml(r.Company || "(unnamed)")}</b><div class="meta">${escapeHtml(r["Role / Position"] || "")}</div>`;
+        const right = document.createElement("div");
+        right.className = "meta";
+        right.textContent = r.Status || "";
+        div.appendChild(left); div.appendChild(right);
+        div.addEventListener("click", () => selectRow(i));
+        host.appendChild(div);
+      });
+      document.getElementById("row-count").textContent = visible + " / " + rows.length;
+    }
 
-      const bundle = await encryptBundle(JSON.stringify(parsed), pw);
+    function selectRow(i) {
+      state.selected = i;
+      const row = state.payload.rows[i] || {};
+      for (const [id, key] of FIELDS) {
+        const el = document.getElementById("f-" + id);
+        if (el) el.value = row[key] || "";
+      }
+      document.getElementById("editor").hidden = false;
+      document.getElementById("editor-msg").textContent = "";
+      renderList();
+      document.getElementById("editor").scrollIntoView({behavior:"smooth", block:"start"});
+    }
+
+    document.getElementById("save-row").addEventListener("click", () => {
+      if (state.selected < 0) return;
+      const row = state.payload.rows[state.selected];
+      for (const [id, key] of FIELDS) {
+        const el = document.getElementById("f-" + id);
+        if (el) row[key] = el.value;
+      }
+      document.getElementById("editor-msg").textContent = "Saved (in memory). Click 'Encrypt and download' to publish.";
+      document.getElementById("editor-msg").className = "status-msg";
+      renderList();
+    });
+
+    document.getElementById("delete-row").addEventListener("click", () => {
+      if (state.selected < 0) return;
+      if (!confirm("Delete this application?")) return;
+      state.payload.rows.splice(state.selected, 1);
+      state.selected = -1;
+      document.getElementById("editor").hidden = true;
+      renderList();
+    });
+
+    document.getElementById("new-app").addEventListener("click", () => {
+      const blank = {};
+      for (const [, key] of FIELDS) blank[key] = "";
+      state.payload.rows.push(blank);
+      selectRow(state.payload.rows.length - 1);
+    });
+
+    document.getElementById("filter").addEventListener("input", (e) => {
+      state.filter = e.target.value; renderList();
+    });
+
+    document.getElementById("ai-suggest").addEventListener("click", (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("editor-msg");
+      msg.className = "status-msg err";
+      msg.textContent = "AI Suggest needs an Anthropic API key in sync/.secrets.env (and the sync agent running). Coming soon — for now, write your STAR story manually.";
+    });
+
+    document.getElementById("encrypt-download").addEventListener("click", async () => {
+      const msg = document.getElementById("encrypt-msg");
+      msg.className = "status-msg";
+      msg.textContent = "Encrypting...";
+      const payload = JSON.parse(JSON.stringify(state.payload));
+      payload.updated_at = new Date().toISOString();
+      const bundle = await encryptBundle(JSON.stringify(payload), state.password);
       const text = JSON.stringify(bundle, null, 2);
-      preview.textContent = text.slice(0, 400) + (text.length > 400 ? "\n..." : "");
-
+      document.getElementById("enc-preview").textContent = text.slice(0, 600) + (text.length > 600 ? "\n..." : "");
       const blob = new Blob([text], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "applications.enc.json";
-      a.click();
+      a.href = url; a.download = "applications.enc.json"; a.click();
       URL.revokeObjectURL(url);
-
-      status.innerHTML = '<span class="ok">downloaded — replace data/applications.enc.json and push.</span>';
+      msg.textContent = "Downloaded. Replace data/applications.enc.json in the repo and push.";
     });
+
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   </script>
 </body>
 </html>

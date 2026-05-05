@@ -1,38 +1,24 @@
-// Job Tracker — client-side decryption + search.
-// Data file format (data/applications.enc.json):
-// {
-//   "v": 1,
-//   "kdf": { "name": "PBKDF2", "hash": "SHA-256", "iters": 200000, "salt_b64": "..." },
-//   "iv_b64": "...",
-//   "ct_b64": "..."   // AES-GCM ciphertext with appended 16-byte tag (WebCrypto default)
-// }
+// Job Tracker — client-side decryption, Kanban board, hash-routed detail view.
 
 const DATA_URL = "data/applications.enc.json";
 
+// ---- crypto ----
 function b64ToBytes(b64) {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
-
 async function deriveKey(password, saltBytes, iters, hash) {
   const baseKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    { name: "PBKDF2" },
-    false,
-    ["deriveKey"]
+    "raw", new TextEncoder().encode(password),
+    { name: "PBKDF2" }, false, ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt: saltBytes, iterations: iters, hash },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["decrypt"]
+    baseKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
   );
 }
-
 async function decryptBundle(bundle, password) {
   const salt = b64ToBytes(bundle.kdf.salt_b64);
   const iv = b64ToBytes(bundle.iv_b64);
@@ -42,120 +28,368 @@ async function decryptBundle(bundle, password) {
   return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
-let allRows = [];
-let columns = [];
+// ---- state ----
+const state = { rows: [], updatedAt: null, query: "", showRejected: false };
 
-function detectStatusKey(cols) {
-  return cols.find(c => /^status$/i.test(c)) || null;
+// ---- columns / status mapping ----
+const COLUMNS = [
+  { key: "wishlist",  label: "Wishlist" },
+  { key: "applied",   label: "Applied" },
+  { key: "interview", label: "Interviewing" },
+  { key: "offer",     label: "Offer" },
+];
+const REJECTED = { key: "rejected", label: "Rejected" };
+
+function statusToColumn(status) {
+  const s = (status || "").toLowerCase();
+  if (!s) return "wishlist";
+  if (/(reject|declined|ghost)/.test(s)) return "rejected";
+  if (/offer|accepted/.test(s)) return "offer";
+  if (/(interview|onsite|phone screen|tech screen|recruiter|under review|under consideration|active|test|assessment|oa)/.test(s)) return "interview";
+  if (/(applied|application|submitted|received|sent|questionnaire|additional info)/.test(s)) return "applied";
+  return "wishlist";
 }
 
-function detectLinkKey(cols) {
-  return cols.find(c => /(link|url|posting)/i.test(c)) || null;
+function statusPillClass(status) {
+  return statusToColumn(status); // pill class names match column keys
 }
 
-function statusClass(value) {
-  if (!value) return "";
-  return String(value).toLowerCase().replace(/[^a-z]/g, "");
+// ---- logo lookup ----
+function logoCandidates(domain) {
+  if (!domain) return [];
+  return [
+    `https://logo.clearbit.com/${domain}`,
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+  ];
 }
 
-function renderHead(cols) {
-  const tr = document.getElementById("grid-head");
-  tr.innerHTML = "";
-  for (const c of cols) {
-    const th = document.createElement("th");
-    th.textContent = c;
-    tr.appendChild(th);
+function makeLogo(row) {
+  const wrap = document.createElement("div");
+  wrap.className = "logo";
+  const initial = (row.Company || "?").trim().charAt(0).toUpperCase();
+  wrap.textContent = initial;
+  const candidates = logoCandidates(row.Domain || "");
+  if (!candidates.length) return wrap;
+
+  const img = document.createElement("img");
+  img.alt = "";
+  let idx = 0;
+  img.onerror = () => {
+    idx += 1;
+    if (idx < candidates.length) img.src = candidates[idx];
+    else img.remove();
+  };
+  img.src = candidates[0];
+  wrap.appendChild(img);
+  return wrap;
+}
+
+// ---- helpers ----
+function ce(tag, props = {}, children = []) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") el.className = v;
+    else if (k === "html") el.innerHTML = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
+    else if (v != null) el.setAttribute(k, v);
   }
+  for (const c of children) {
+    if (c == null) continue;
+    el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return el;
 }
 
-function cellRender(col, value, statusKey, linkKey) {
-  const td = document.createElement("td");
-  if (value == null || value === "") return td;
-  const text = String(value);
-  if (col === statusKey) {
-    const span = document.createElement("span");
-    span.className = "status-pill " + statusClass(text);
-    span.textContent = text;
-    td.appendChild(span);
-    return td;
-  }
-  if (col === linkKey && /^https?:\/\//i.test(text)) {
-    const a = document.createElement("a");
-    a.href = text;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = "open";
-    td.appendChild(a);
-    return td;
-  }
-  td.textContent = text;
-  return td;
+function rowId(row, idx) {
+  // stable-ish per row: prefer Job ID, else Company-DateApplied-idx
+  const jid = (row["Job ID / Req"] || "").toString().trim();
+  if (jid) return "j-" + jid.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+  const c = (row.Company || "").toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const d = (row["Date Applied"] || "").toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return `r-${c}-${d}-${idx}`;
 }
 
-function renderRows(rows) {
-  const body = document.getElementById("grid-body");
-  body.innerHTML = "";
-  const statusKey = detectStatusKey(columns);
-  const linkKey = detectLinkKey(columns);
-  const frag = document.createDocumentFragment();
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    for (const c of columns) {
-      tr.appendChild(cellRender(c, r[c], statusKey, linkKey));
-    }
-    frag.appendChild(tr);
-  }
-  body.appendChild(frag);
-  document.getElementById("count").textContent =
-    rows.length + " of " + allRows.length;
-  document.getElementById("empty").hidden = rows.length > 0;
+function parsePct(s) {
+  if (s == null) return null;
+  const m = String(s).match(/(\d{1,3})/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
 }
 
-function filterRows(query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return allRows;
-  return allRows.filter(r => {
-    for (const c of columns) {
-      const v = r[c];
-      if (v != null && String(v).toLowerCase().includes(q)) return true;
-    }
-    return false;
+function rowMatchesQuery(row, q) {
+  if (!q) return true;
+  q = q.trim().toLowerCase();
+  if (!q) return true;
+  for (const v of Object.values(row)) {
+    if (v != null && String(v).toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
+// ---- views ----
+function renderDashboard() {
+  const root = document.getElementById("view-root");
+  root.innerHTML = "";
+
+  const head = ce("div", { class: "main-head" }, [
+    ce("h1", { text: "Job Tracker Dashboard" }),
+    ce("div", { class: "head-actions" }, [
+      ce("input", {
+        class: "search", type: "search", placeholder: "Search company, role, status...",
+        value: state.query, oninput: (e) => { state.query = e.target.value; renderKanban(); }
+      }),
+      ce("button", {
+        class: "btn-primary",
+        onclick: () => { window.location.href = "admin.html"; }
+      }, ["+ Add New Application"]),
+    ])
+  ]);
+  root.appendChild(head);
+
+  const board = ce("div", { id: "kanban", class: "kanban" });
+  root.appendChild(board);
+
+  const rejectedRows = state.rows.filter(r => statusToColumn(r.Status) === "rejected");
+  if (rejectedRows.length) {
+    const toggle = ce("button", {
+      class: "toggle-rejected",
+      style: "margin-top: 18px;",
+      onclick: () => { state.showRejected = !state.showRejected; renderKanban(); }
+    });
+    toggle.id = "toggle-rejected";
+    root.appendChild(toggle);
+  }
+
+  renderKanban();
+  renderUpcoming();
+}
+
+function renderKanban() {
+  const board = document.getElementById("kanban");
+  if (!board) return;
+  board.innerHTML = "";
+  board.classList.toggle("with-rejected", state.showRejected);
+
+  const cols = state.showRejected ? [...COLUMNS, REJECTED] : COLUMNS;
+  const buckets = Object.fromEntries(cols.map(c => [c.key, []]));
+  state.rows.forEach((row, idx) => {
+    if (!rowMatchesQuery(row, state.query)) return;
+    const col = statusToColumn(row.Status);
+    if (!buckets[col]) return;
+    buckets[col].push({ row, idx });
   });
-}
 
-function setupSearch() {
-  const input = document.getElementById("search");
-  input.addEventListener("input", () => renderRows(filterRows(input.value)));
-}
-
-function showApp(payload) {
-  document.getElementById("gate").hidden = true;
-  document.getElementById("app").hidden = false;
-
-  allRows = Array.isArray(payload.rows) ? payload.rows : [];
-  // Column order: union of keys, preserving first-row order then any new keys.
-  const seen = new Set();
-  columns = [];
-  if (allRows.length) {
-    for (const k of Object.keys(allRows[0])) { columns.push(k); seen.add(k); }
-    for (const r of allRows) {
-      for (const k of Object.keys(r)) {
-        if (!seen.has(k)) { columns.push(k); seen.add(k); }
-      }
+  for (const c of cols) {
+    const col = ce("div", { class: `column ${c.key}` });
+    col.appendChild(ce("div", { class: "col-head" }, [
+      ce("span", { class: "title", text: c.label }),
+      ce("span", { class: "count", text: `(${buckets[c.key].length})` }),
+    ]));
+    const list = ce("div", { class: "col-list" });
+    if (!buckets[c.key].length) {
+      list.appendChild(ce("div", { class: "empty-col", text: "—" }));
+    } else {
+      for (const { row, idx } of buckets[c.key]) list.appendChild(renderCard(row, idx));
     }
+    col.appendChild(list);
+    board.appendChild(col);
   }
 
-  if (payload.updated_at) {
-    document.getElementById("meta").textContent =
-      "Updated " + new Date(payload.updated_at).toLocaleString();
+  const t = document.getElementById("toggle-rejected");
+  if (t) {
+    const n = state.rows.filter(r => statusToColumn(r.Status) === "rejected").length;
+    t.textContent = state.showRejected ? `Hide rejected (${n})` : `Show rejected (${n})`;
   }
-
-  renderHead(columns);
-  renderRows(allRows);
-  setupSearch();
-  document.getElementById("search").focus();
 }
 
+function renderCard(row, idx) {
+  const id = rowId(row, idx);
+  const card = ce("a", { class: "card", href: `#/app/${id}` });
+
+  const dots = ce("div", { class: "drag-dots", "aria-hidden": "true" });
+  for (let i = 0; i < 6; i++) dots.appendChild(ce("span"));
+  card.appendChild(dots);
+
+  const head = ce("div", { class: "card-head" }, [
+    makeLogo(row),
+    ce("div", {}, [
+      ce("div", { class: "card-company", text: row.Company || "—" }),
+      ce("div", { class: "card-role", text: row["Role / Position"] || "" }),
+    ]),
+  ]);
+  card.appendChild(head);
+
+  if (row["Quote CTC"] || row["Salary Band"]) {
+    card.appendChild(ce("div", { class: "kv", html:
+      `<b>Salary:</b> ${escapeHtml(row["Quote CTC"] || row["Salary Band"])}` }));
+  }
+  if (row.Location) {
+    card.appendChild(ce("div", { class: "kv", html:
+      `<b>Location:</b> ${escapeHtml(row.Location)}` }));
+  }
+
+  const status = (row.Status || "").trim();
+  if (status) {
+    const foot = ce("div", { class: "card-foot" }, [
+      ce("span", { class: `pill ${statusPillClass(status)}`, text: status }),
+    ]);
+    card.appendChild(foot);
+  }
+
+  return card;
+}
+
+function renderUpcoming() {
+  const list = document.getElementById("upcoming-list");
+  if (!list) return;
+  const interviewing = state.rows.filter(r => statusToColumn(r.Status) === "interview");
+  list.innerHTML = "";
+  if (!interviewing.length) {
+    list.appendChild(ce("li", { class: "empty", text: "No upcoming interviews" }));
+    return;
+  }
+  for (const r of interviewing.slice(0, 6)) {
+    list.appendChild(ce("li", { text: `${r.Company} · ${r.Status}` }));
+  }
+}
+
+function renderDetail(id) {
+  const root = document.getElementById("view-root");
+  root.innerHTML = "";
+  const idx = state.rows.findIndex((r, i) => rowId(r, i) === id);
+  if (idx < 0) {
+    root.appendChild(ce("div", { class: "empty-detail", text: "Application not found." }));
+    root.appendChild(ce("a", { class: "back-link", href: "#/" }, ["← Back to dashboard"]));
+    return;
+  }
+  const row = state.rows[idx];
+
+  root.appendChild(ce("a", { class: "back-link", href: "#/" }, ["← Back to dashboard"]));
+
+  const head = ce("div", { class: "detail-head" }, [
+    makeLogo(row),
+    ce("div", { class: "who" }, [
+      ce("h1", { text: row.Company || "—" }),
+      ce("h2", { text: row["Role / Position"] || "" }),
+      ce("div", { class: "meta" }, [
+        row.Location ? ce("span", { text: row.Location }) : null,
+        row["Date Applied"] ? ce("span", { text: "Applied " + row["Date Applied"] }) : null,
+        row.Platform ? ce("span", { text: row.Platform }) : null,
+        row.Tier ? ce("span", { text: row.Tier }) : null,
+      ].filter(Boolean)),
+    ]),
+    row.Status ? ce("div", {}, [ce("span", { class: `pill ${statusPillClass(row.Status)}`, text: row.Status })]) : null,
+  ].filter(Boolean));
+  root.appendChild(head);
+
+  const grid = ce("div", { class: "detail-grid" });
+  const left = ce("div");
+  const right = ce("div");
+
+  // JD
+  left.appendChild(section("Job Description",
+    row["Role Summary (JD)"] || "(no description yet — paste JD via admin.html)",
+    !row["Role Summary (JD)"]));
+
+  // STAR Story
+  left.appendChild(section("STAR Story",
+    row["STAR Story"] ||
+      "(empty — write a STAR story in admin.html. AI ✨ Suggest needs your Anthropic API key in sync/.secrets.env.)",
+    !row["STAR Story"]));
+
+  // Salary to Quote
+  const salaryBody = [
+    row["Quote CTC"] ? `Quote CTC: ${row["Quote CTC"]}` : null,
+    row["Salary Band"] ? `Salary Band: ${row["Salary Band"]}` : null,
+  ].filter(Boolean).join("\n");
+  left.appendChild(section("Salary to Quote",
+    salaryBody || "(no salary info)",
+    !salaryBody));
+
+  // Next Step + Notes
+  if (row["Next Step"]) left.appendChild(section("Next Step", row["Next Step"]));
+  if (row["Notes / Key Facts"]) left.appendChild(section("Notes", row["Notes / Key Facts"]));
+
+  // Right: Chances gauge + metadata
+  const fitPct = parsePct(row["Fit %"]);
+  const chancesText = (row.Chances || "").trim();
+  const gauge = ce("div", { class: "section" }, [
+    ce("h3", { text: "Chances of Getting the Job" }),
+    ce("div", { class: "gauge-wrap" }, [
+      gaugeEl(fitPct ?? 0),
+      ce("div", { class: "gauge-info" }, [
+        ce("div", { html: fitPct != null ? `<b>Fit:</b> ${fitPct}%` : `<b>Fit:</b> not set` }),
+        chancesText ? ce("div", { html: `<b>Chance:</b> ${escapeHtml(chancesText)}`, style: "margin-top: 6px;" }) : null,
+      ].filter(Boolean)),
+    ])
+  ]);
+  right.appendChild(gauge);
+
+  // Metadata table
+  const meta = ce("div", { class: "section" }, [
+    ce("h3", { text: "Application Details" }),
+    kvTable([
+      ["Job ID / Req", row["Job ID / Req"]],
+      ["Grade", row.Grade],
+      ["Tier", row.Tier],
+      ["Platform", row.Platform],
+      ["Domain", row.Domain],
+      ["Date Applied", row["Date Applied"]],
+    ]),
+  ]);
+  right.appendChild(meta);
+
+  grid.appendChild(left);
+  grid.appendChild(right);
+  root.appendChild(grid);
+}
+
+function section(title, body, isMuted = false) {
+  return ce("div", { class: "section" }, [
+    ce("h3", { text: title }),
+    ce("div", { class: "body" + (isMuted ? " muted" : ""), text: body }),
+  ]);
+}
+
+function gaugeEl(pct) {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  const g = ce("div", { class: "gauge", style: `--pct:${p}` }, [
+    ce("span", { class: "v", text: pct != null ? `${p}%` : "—" }),
+  ]);
+  return g;
+}
+
+function kvTable(pairs) {
+  const t = ce("div", { class: "kv-table" });
+  for (const [k, v] of pairs) {
+    if (v == null || v === "") continue;
+    t.appendChild(ce("div", { class: "row" }, [
+      ce("div", { class: "k", text: k }),
+      ce("div", { class: "v", text: String(v) }),
+    ]));
+  }
+  return t;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+// ---- routing ----
+function route() {
+  const h = window.location.hash || "#/";
+  const m = h.match(/^#\/app\/([^/]+)/);
+  if (m) renderDetail(decodeURIComponent(m[1]));
+  else renderDashboard();
+}
+
+window.addEventListener("hashchange", route);
+
+// ---- gate ----
 async function tryUnlock(password) {
   const errorEl = document.getElementById("gate-error");
   errorEl.hidden = true;
@@ -171,12 +405,28 @@ async function tryUnlock(password) {
   }
   try {
     const payload = await decryptBundle(bundle, password);
-    sessionStorage.setItem("jt-pw", password); // keep for this tab session only
-    showApp(payload);
+    sessionStorage.setItem("jt-pw", password);
+    onUnlocked(payload);
   } catch (e) {
     errorEl.textContent = "Wrong password.";
     errorEl.hidden = false;
   }
+}
+
+function onUnlocked(payload) {
+  state.rows = Array.isArray(payload.rows) ? payload.rows : [];
+  state.updatedAt = payload.updated_at || null;
+  document.getElementById("gate").hidden = true;
+  document.getElementById("app").hidden = false;
+  // sidebar nav clicks (only Dashboard is wired)
+  document.querySelectorAll(".sidebar .nav li").forEach(li => {
+    li.addEventListener("click", () => {
+      document.querySelectorAll(".sidebar .nav li").forEach(x => x.classList.remove("active"));
+      li.classList.add("active");
+      window.location.hash = "#/";
+    });
+  });
+  route();
 }
 
 document.getElementById("unlock-form").addEventListener("submit", (e) => {
@@ -184,6 +434,6 @@ document.getElementById("unlock-form").addEventListener("submit", (e) => {
   tryUnlock(document.getElementById("password").value);
 });
 
-// Auto-unlock if we have a session password (refresh-friendly).
+// Auto-unlock if a session password is cached.
 const cached = sessionStorage.getItem("jt-pw");
 if (cached) tryUnlock(cached);
