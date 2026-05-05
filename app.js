@@ -67,27 +67,31 @@ function makeLogo(row) {
   const wrap = document.createElement("div");
   wrap.className = "logo";
   const initial = (row.Company || "?").trim().charAt(0).toUpperCase();
-  const monogram = document.createElement("span");
-  monogram.className = "monogram";
-  monogram.textContent = initial;
-  wrap.appendChild(monogram);
-
   const candidates = logoCandidates(row.Domain || "");
-  if (!candidates.length) return wrap;
 
+  const showMonogram = () => {
+    wrap.replaceChildren();
+    const m = document.createElement("span");
+    m.className = "monogram";
+    m.textContent = initial;
+    wrap.appendChild(m);
+  };
+
+  if (!candidates.length) { showMonogram(); return wrap; }
+
+  // Start with an empty white-plate placeholder; swap to monogram only if all
+  // candidates fail. Never show monogram and image at the same time.
   const img = document.createElement("img");
   img.alt = "";
   let idx = 0;
   const tryNext = () => {
     idx += 1;
     if (idx < candidates.length) img.src = candidates[idx];
-    else img.remove(); // keep monogram visible
+    else showMonogram();
   };
   img.onerror = tryNext;
   img.onload = () => {
-    // Reject the favicon "globe" placeholder Google returns for unknown domains.
-    if (img.naturalWidth < 16) { tryNext(); return; }
-    monogram.style.display = "none";
+    if (img.naturalWidth < 16) tryNext();
   };
   img.src = candidates[0];
   wrap.appendChild(img);
