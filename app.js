@@ -55,19 +55,31 @@ function statusPillClass(status) {
 }
 
 // ---- logo lookup ----
-function logoCandidates(domain) {
-  if (!domain) return [];
-  return [
-    `https://logo.clearbit.com/${domain}`,
-    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-  ];
+function slugify(s) {
+  return String(s || "").toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function logoCandidates(row) {
+  const domain = (row.Domain || "").trim();
+  const company = (row.Company || "").trim();
+  const out = [];
+  // 1) Per-row override (user-supplied URL)
+  if (row.LogoUrl) out.push(row.LogoUrl);
+  // 2) Local logo bundled in repo
+  if (company) out.push(`data/logos/${slugify(company)}.png`);
+  if (!domain) return out;
+  // 3) Network sources (chained, all CORS-safe for <img> tags)
+  out.push(`https://logo.uplead.com/${domain}`);
+  out.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
+  out.push(`https://icons.duckduckgo.com/ip3/${domain}.ico`);
+  return out;
 }
 
 function makeLogo(row) {
   const wrap = document.createElement("div");
   wrap.className = "logo";
   const initial = (row.Company || "?").trim().charAt(0).toUpperCase();
-  const candidates = logoCandidates(row.Domain || "");
+  const candidates = logoCandidates(row);
 
   const showMonogram = () => {
     wrap.replaceChildren();
@@ -91,7 +103,8 @@ function makeLogo(row) {
   };
   img.onerror = tryNext;
   img.onload = () => {
-    if (img.naturalWidth < 16) tryNext();
+    // Reject placeholder/globe icons that some services return for unknown domains.
+    if (img.naturalWidth < 24 || img.naturalHeight < 24) tryNext();
   };
   img.src = candidates[0];
   wrap.appendChild(img);

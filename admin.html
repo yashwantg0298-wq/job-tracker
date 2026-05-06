@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Job Tracker — Update data</title>
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=4" />
   <style>
     .admin-shell { max-width: 980px; margin: 32px auto; padding: 0 24px 64px; position: relative; z-index: 1; }
     .admin-shell h1 { font-size: 26px; margin: 0 0 6px; }
@@ -87,6 +87,8 @@
         <div><label>Company</label><input id="f-Company" type="text" /></div>
         <div><label>Domain (for logo)</label><input id="f-Domain" type="text" placeholder="e.g. tesla.com" /></div>
       </div>
+      <div style="margin-top:10px"><label>Logo URL (override, optional)</label>
+        <input id="f-LogoUrl" type="text" placeholder="https://... — leave blank to auto-fetch from Domain" /></div>
       <div class="grid2" style="margin-top:10px">
         <div><label>Role / Position</label><input id="f-Role" type="text" /></div>
         <div><label>Status</label><input id="f-Status" type="text" placeholder="Applied, Interviewing, Offer, Rejected, ..." /></div>
@@ -172,7 +174,7 @@
 
     // ===== state =====
     const FIELDS = [
-      ["Company","Company"], ["Domain","Domain"],
+      ["Company","Company"], ["Domain","Domain"], ["LogoUrl","LogoUrl"],
       ["Role","Role / Position"], ["Status","Status"],
       ["DateApplied","Date Applied"], ["Location","Location"], ["Platform","Platform"],
       ["Tier","Tier"], ["Grade","Grade"], ["JobId","Job ID / Req"],
