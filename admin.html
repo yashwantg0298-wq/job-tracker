@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex, nofollow" />
   <title>Job Tracker — Update data</title>
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <style>
     .admin-shell { max-width: 980px; margin: 32px auto; padding: 0 24px 64px; position: relative; z-index: 1; }
     .admin-shell h1 { font-size: 26px; margin: 0 0 6px; }
@@ -114,11 +114,17 @@
         <textarea id="f-JD" class="tall"></textarea></div>
 
       <div style="margin-top:12px">
-        <label>STAR Story
-          <button class="btn-suggest" id="ai-suggest" style="float:right">✨ Suggest with AI</button>
+        <label>STAR Story — Technical
+          <button class="btn-suggest" id="ai-suggest-tech" style="float:right">✨ Suggest with AI</button>
         </label>
-        <textarea id="f-STAR" class="tall" placeholder="Situation. Task. Action. Result."></textarea>
-        <div class="help">Tip: Configure your Anthropic API key in <code>sync/.secrets.env</code> and run the sync agent for automated suggestions, or paste a key when prompted to suggest in-browser.</div>
+        <textarea id="f-STARTech" class="tall" placeholder="QUESTION: ...&#10;SITUATION: ...&#10;TASK: ...&#10;ACTION: ...&#10;RESULT: ..."></textarea>
+      </div>
+      <div style="margin-top:12px">
+        <label>STAR Story — Non-Technical / Behavioral
+          <button class="btn-suggest" id="ai-suggest-beh" style="float:right">✨ Suggest with AI</button>
+        </label>
+        <textarea id="f-STARBeh" class="tall" placeholder="QUESTION: ...&#10;SITUATION: ...&#10;TASK: ...&#10;ACTION: ...&#10;RESULT: ..."></textarea>
+        <div class="help">Tip: Configure your Anthropic API key in <code>sync/.secrets.env</code> for AI suggestions, or write directly here.</div>
       </div>
 
       <div style="margin-top:12px"><label>Next Step</label>
@@ -179,7 +185,8 @@
       ["DateApplied","Date Applied"], ["Location","Location"], ["Platform","Platform"],
       ["Tier","Tier"], ["Grade","Grade"], ["JobId","Job ID / Req"],
       ["SalaryBand","Salary Band"], ["QuoteCTC","Quote CTC"], ["Fit","Fit %"],
-      ["Chances","Chances"], ["JD","Role Summary (JD)"], ["STAR","STAR Story"],
+      ["Chances","Chances"], ["JD","Role Summary (JD)"],
+      ["STARTech","STAR (Technical)"], ["STARBeh","STAR (Non-Technical)"],
       ["NextStep","Next Step"], ["Notes","Notes / Key Facts"],
     ];
 
@@ -281,12 +288,16 @@
       state.filter = e.target.value; renderList();
     });
 
-    document.getElementById("ai-suggest").addEventListener("click", (e) => {
+    function aiSuggestStub(e) {
       e.preventDefault();
       const msg = document.getElementById("editor-msg");
       msg.className = "status-msg err";
       msg.textContent = "AI Suggest needs an Anthropic API key in sync/.secrets.env (and the sync agent running). Coming soon — for now, write your STAR story manually.";
-    });
+    }
+    const techBtn = document.getElementById("ai-suggest-tech");
+    const behBtn = document.getElementById("ai-suggest-beh");
+    if (techBtn) techBtn.addEventListener("click", aiSuggestStub);
+    if (behBtn) behBtn.addEventListener("click", aiSuggestStub);
 
     document.getElementById("encrypt-download").addEventListener("click", async () => {
       const msg = document.getElementById("encrypt-msg");

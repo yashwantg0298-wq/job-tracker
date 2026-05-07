@@ -320,11 +320,15 @@ function renderDetail(id) {
     row["Role Summary (JD)"] || "(no description yet — paste JD via admin.html)",
     !row["Role Summary (JD)"]));
 
-  // STAR Story
-  left.appendChild(section("STAR Story",
-    row["STAR Story"] ||
-      "(empty — write a STAR story in admin.html. AI ✨ Suggest needs your Anthropic API key in sync/.secrets.env.)",
-    !row["STAR Story"]));
+  // STAR Stories — two separate sections
+  const starTech = row["STAR (Technical)"] || row["STAR Story"] || "";
+  const starBeh  = row["STAR (Non-Technical)"] || "";
+  left.appendChild(section("STAR Story — Technical",
+    starTech || "(empty — add via admin.html)",
+    !starTech));
+  left.appendChild(section("STAR Story — Non-Technical / Behavioral",
+    starBeh || "(empty — add via admin.html)",
+    !starBeh));
 
   // Salary to Quote
   const salaryBody = [
